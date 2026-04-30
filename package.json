@@ -1,0 +1,21 @@
+{
+  "name": "cursor-memory-skills",
+  "version": "0.1.0",
+  "description": "Agent Skill package that asks Cursor SDK to scout relevant files before Claude Code or Codex edits.",
+  "type": "module",
+  "scripts": {
+    "doctor": "node skills/cursor-context-scout/scripts/cursor-scout.mjs doctor",
+    "help": "node skills/cursor-context-scout/scripts/cursor-scout.mjs --help"
+  },
+  "keywords": [
+    "agent-skills",
+    "cursor-sdk",
+    "claude-code",
+    "codex"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nanameru/Cursor-Memory-Skills.git"
+  },
+  "license": "MIT"
+}
