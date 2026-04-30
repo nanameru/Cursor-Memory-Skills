@@ -4,16 +4,20 @@ Use this guide to roll out `cursor-context-scout` to a team. Each teammate insta
 
 ## Install
 
+Claude Code global install:
+
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills -g
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
+npx skills add nanameru/Cursor-Memory-Skills -g -a claude-code --skill cursor-context-scout -y --copy
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-Alternative helper script with a global environment variable prompt:
+Claude Code + Codex helper script with a global environment variable prompt and a Claude Code path check:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skills/main/scripts/install-global.sh)
 ```
+
+For Claude Code, verify the file exists at `~/.claude/skills/cursor-context-scout/SKILL.md`. Claude Code does not load a skill from `~/.agents/skills` unless another installer also copies it into `~/.claude/skills`.
 
 ## Requirements
 
@@ -38,19 +42,19 @@ Cursor's official CLI authentication docs describe the same `Integrations` > `Us
 Global setup writes an `export CURSOR_API_KEY=...` block to the user's shell profile such as `~/.zshrc`:
 
 ```bash
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
 Project setup writes `CURSOR_API_KEY=...` to `.env.local` and adds `.env.local` to `.gitignore`:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
+node .claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
 ```
 
 Non-interactive global setup from an existing environment variable:
 
 ```bash
-printf '%s' "$CURSOR_API_KEY" | node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global --stdin
+printf '%s' "$CURSOR_API_KEY" | node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global --stdin
 ```
 
 `CURSOR_API_KEY` in the current process has highest priority. Do not commit API keys to a repository.
@@ -59,14 +63,17 @@ printf '%s' "$CURSOR_API_KEY" | node ~/.agents/skills/cursor-context-scout/scrip
 
 ```bash
 npx skills add nanameru/Cursor-Memory-Skills --list
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs doctor --install-sdk
+test -f ~/.claude/skills/cursor-context-scout/SKILL.md
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs doctor --install-sdk
 ```
+
+If Claude Code was already running and `~/.claude/skills` was created during install, restart Claude Code once. Then ask Claude Code `What Skills are available?` or run `/cursor-context-scout` to confirm discovery.
 
 ## First Use In A Repository
 
 ```bash
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo .
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs scout --repo . --task "Describe the change you want"
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo .
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs scout --repo . --task "Describe the change you want"
 ```
 
 After this, Claude Code or Codex can use the installed skill before editing.

@@ -2,36 +2,45 @@
 
 `Cursor-Memory-Skills` is an Agent Skills package for Claude Code and Codex. The first bundled skill, `cursor-context-scout`, asks Cursor SDK to inspect a repository before the coding agent edits files, then returns a compact JSON list of files worth reading.
 
-Global user install:
+Recommended global install for Claude Code:
 
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills -g
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
+npx skills add nanameru/Cursor-Memory-Skills -g -a claude-code --skill cursor-context-scout -y --copy
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-Or use the helper script for an install + global environment variable prompt flow:
+Claude Code only discovers skills from `~/.claude/skills/<skill-name>/SKILL.md` for personal installs and `.claude/skills/<skill-name>/SKILL.md` for project installs. If `npx skills add` installs the skill somewhere else, reinstall with the command above or use the helper script below.
+
+Repair an install that does not show up in Claude Code:
+
+```bash
+npx skills add nanameru/Cursor-Memory-Skills -g -a claude-code --skill cursor-context-scout -y --copy
+test -f ~/.claude/skills/cursor-context-scout/SKILL.md
+```
+
+Install for both Claude Code and Codex with an API key prompt and a Claude Code path check:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skills/main/scripts/install-global.sh)
 ```
 
-Install into only the current project:
+Install into only the current Claude Code project:
 
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
+npx skills add nanameru/Cursor-Memory-Skills -a claude-code --skill cursor-context-scout -y --copy
+node .claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
 ```
 
 Set a Cursor API key before first use. Global setup writes an `export CURSOR_API_KEY=...` block to your shell profile such as `~/.zshrc`:
 
 ```bash
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
 Project setup writes `CURSOR_API_KEY=...` to `.env.local` and adds `.env.local` to `.gitignore`:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
+node .claude/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
 ```
 
 `CURSOR_API_KEY` in the current process still has highest priority.
@@ -51,22 +60,24 @@ Cursor documents this flow in its [CLI authentication docs](https://cursor.com/d
 The bundled script bootstraps `@cursor/sdk` into a user cache directory on first scout run. Check setup with:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs doctor --install-sdk
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs doctor --install-sdk
 ```
 
 Warm a repository before the first real task:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo /path/to/repo
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo /path/to/repo
 ```
 
 Direct scout:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs scout \
+node ~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs scout \
   --repo /path/to/repo \
   --task "Implement the Figma comment about button hover color"
 ```
+
+If Claude Code was already running and the top-level `~/.claude/skills` directory did not exist when it started, restart Claude Code once. After installing, ask Claude Code `What Skills are available?` or invoke `/cursor-context-scout` to confirm it is visible.
 
 When running from this repository checkout before installing the skill, use `node skills/cursor-context-scout/scripts/cursor-scout.mjs ...` instead.
 
