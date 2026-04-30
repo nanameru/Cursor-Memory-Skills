@@ -5,11 +5,11 @@ Use this guide to roll out `cursor-context-scout` to a team. Each teammate insta
 ## Install
 
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills -g -a claude-code -a codex --skill cursor-context-scout -y --copy
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
+npx skills add nanameru/Cursor-Memory-Skills -g
+node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-Alternative helper script with an API key prompt:
+Alternative helper script with a global environment variable prompt:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skills/main/scripts/install-global.sh)
@@ -23,19 +23,27 @@ bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skill
 
 ## API Key
 
-Each user should set their own Cursor API key, or use a team-managed key from your secrets manager. The configure command stores the key locally in `~/.config/cursor-context-scout/config.json` with file mode `0600`:
+Each user should set their own Cursor API key, or use a team-managed key from your secrets manager.
+
+Global setup writes an `export CURSOR_API_KEY=...` block to the user's shell profile such as `~/.zshrc`:
 
 ```bash
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
+node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-Non-interactive setup from an existing environment variable:
+Project setup writes `CURSOR_API_KEY=...` to `.env.local` and adds `.env.local` to `.gitignore`:
 
 ```bash
-printf '%s' "$CURSOR_API_KEY" | node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --stdin
+node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
 ```
 
-`CURSOR_API_KEY` can still be used directly as an environment variable; it overrides the saved value. Do not commit API keys to a repository.
+Non-interactive global setup from an existing environment variable:
+
+```bash
+printf '%s' "$CURSOR_API_KEY" | node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global --stdin
+```
+
+`CURSOR_API_KEY` in the current process has highest priority. Do not commit API keys to a repository.
 
 ## Verify
 

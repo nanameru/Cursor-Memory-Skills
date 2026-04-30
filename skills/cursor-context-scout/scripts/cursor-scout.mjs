@@ -19,19 +19,19 @@ function usage() {
   return `Cursor Context Scout
 
 Usage:
-  cursor-scout.mjs configure [--force] [--stdin] [--api-key <key>]
-  cursor-scout.mjs doctor [--install-sdk]
+  cursor-scout.mjs configure [--scope global|project|config] [--repo <path>] [--profile <file>] [--env-file <file>] [--force] [--stdin] [--api-key <key>]
+  cursor-scout.mjs doctor [--repo <path>] [--install-sdk]
   cursor-scout.mjs warmup [--repo <path>] [--model <id>]
   cursor-scout.mjs scout --task <text> [--repo <path>] [--folder <path>] [--output <file>] [--model <id>] [--max-files <n>] [--timeout-ms <n>]
 
 Environment:
-  CURSOR_API_KEY          Optional. Overrides the saved API key.
+  CURSOR_API_KEY          Preferred runtime source. Overrides project/global saved values.
   CURSOR_SCOUT_MODEL     Defaults to ${DEFAULT_MODEL}.
   CURSOR_SCOUT_CACHE_DIR Defaults to ${CACHE_DIR}.
-  CURSOR_SCOUT_CONFIG_DIR Defaults to ${CONFIG_DIR}.
 
 Examples:
-  node scripts/cursor-scout.mjs configure
+  node scripts/cursor-scout.mjs configure --scope global
+  node scripts/cursor-scout.mjs configure --scope project --repo .
   node scripts/cursor-scout.mjs doctor
   node scripts/cursor-scout.mjs warmup --repo .
   node scripts/cursor-scout.mjs scout --repo . --task "Fix the Figma comment about the button hover state"
@@ -70,6 +70,132 @@ function relPath(repoRoot, target) {
   if (!target) return undefined;
   const absolute = path.resolve(repoRoot, target);
   return path.relative(repoRoot, absolute) || ".";
+}
+
+function defaultShellProfile() {
+  const shell = path.basename(process.env.SHELL || "");
+  if (shell === "zsh") return path.join(homedir(), ".zshrc");
+  if (shell === "bash") return process.platform === "darwin"
+    ? path.join(homedir(), ".bash_profile")
+    : path.join(homedir(), ".bashrc");
+  return path.join(homedir(), ".profile");
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function dotenvValue(value) {
+  const raw = String(value);
+  return /^[A-Za-z0-9_./:=+@-]+$/.test(raw) ? raw : JSON.stringify(raw);
+}
+
+function parseEnvValue(raw) {
+  const value = raw.trim();
+  if (!value) return "";
+  if (value.startsWith('"') && value.endsWith('"')) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  if (value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replace(/'\\''/g, "'");
+  }
+  return value.replace(/\s+#.*$/, "").trim();
+}
+
+function upsertEnvLine(content, key, value) {
+  const lines = content ? content.split(/\r?\n/) : [];
+  const nextLine = `${key}=${dotenvValue(value)}`;
+  let replaced = false;
+  const nextLines = lines.map((line) => {
+    if (line.match(new RegExp(`^\\s*${key}\\s*=`))) {
+      replaced = true;
+      return nextLine;
+    }
+    return line;
+  });
+  if (!replaced) {
+    if (nextLines.length > 0 && nextLines.at(-1) !== "") nextLines.push("");
+    nextLines.push(nextLine);
+  }
+  return `${nextLines.join("\n").replace(/\n*$/, "")}\n`;
+}
+
+function upsertShellProfileBlock(content, apiKey) {
+  const block = [
+    "# >>> cursor-context-scout",
+    `export CURSOR_API_KEY=${shellQuote(apiKey)}`,
+    "# <<< cursor-context-scout",
+  ].join("\n");
+  const blockRegex = /# >>> cursor-context-scout[\s\S]*?# <<< cursor-context-scout\n?/;
+  if (blockRegex.test(content)) return content.replace(blockRegex, `${block}\n`);
+  const prefix = content && !content.endsWith("\n") ? "\n" : "";
+  return `${content || ""}${prefix}${block}\n`;
+}
+
+async function readTextIfExists(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return "";
+    throw error;
+  }
+}
+
+async function readProjectEnvApiKey(repoRoot, envFile = ".env.local") {
+  const envPath = path.resolve(repoRoot, envFile);
+  const content = await readTextIfExists(envPath);
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^\s*CURSOR_API_KEY\s*=\s*(.+?)\s*$/);
+    if (match) return { apiKey: parseEnvValue(match[1]), source: envPath };
+  }
+  return { apiKey: "", source: envPath };
+}
+
+async function readShellProfileApiKey(profilePath = defaultShellProfile()) {
+  const content = await readTextIfExists(profilePath);
+  for (const line of content.split(/\r?\n/)) {
+    const match = line.match(/^\s*(?:export\s+)?CURSOR_API_KEY\s*=\s*(.+?)\s*$/);
+    if (match) return { apiKey: parseEnvValue(match[1]), source: profilePath };
+  }
+  return { apiKey: "", source: profilePath };
+}
+
+async function saveGlobalEnv(apiKey, profilePath = defaultShellProfile()) {
+  const content = await readTextIfExists(profilePath);
+  await mkdir(path.dirname(profilePath), { recursive: true });
+  await writeFile(profilePath, upsertShellProfileBlock(content, apiKey), { mode: 0o600 });
+  await chmod(profilePath, 0o600).catch(() => {});
+  return profilePath;
+}
+
+async function saveProjectEnv(apiKey, repoRoot, envFile = ".env.local", updateGitignore = true) {
+  const envPath = path.resolve(repoRoot, envFile);
+  const content = await readTextIfExists(envPath);
+  await writeFile(envPath, upsertEnvLine(content, "CURSOR_API_KEY", apiKey), { mode: 0o600 });
+  await chmod(envPath, 0o600).catch(() => {});
+
+  if (updateGitignore) {
+    const rel = path.relative(repoRoot, envPath).replace(/\\/g, "/");
+    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) {
+      const gitignorePath = path.join(repoRoot, ".gitignore");
+      const gitignore = await readTextIfExists(gitignorePath);
+      const patterns = gitignore.split(/\r?\n/).map((line) => line.trim());
+      const ignored = patterns.includes(rel)
+        || patterns.includes(path.basename(rel))
+        || (path.basename(rel) === ".env.local" && patterns.includes(".env*.local"));
+      if (!ignored) {
+        const prefix = gitignore && !gitignore.endsWith("\n") ? "\n" : "";
+        const spacer = gitignore ? "\n" : "";
+        await writeFile(gitignorePath, `${gitignore}${prefix}${spacer}# Cursor Context Scout local secrets\n${rel}\n`);
+      }
+    }
+  }
+
+  return envPath;
 }
 
 async function readConfig() {
@@ -139,14 +265,20 @@ async function promptHidden(prompt) {
   });
 }
 
-async function getCursorApiKeyInfo() {
+async function getCursorApiKeyInfo({ repoRoot } = {}) {
   if (process.env.CURSOR_API_KEY) {
     return { apiKey: process.env.CURSOR_API_KEY, source: "env:CURSOR_API_KEY" };
   }
+  if (repoRoot) {
+    const projectEnv = await readProjectEnvApiKey(repoRoot);
+    if (projectEnv.apiKey) return projectEnv;
+  }
   const config = await readConfig();
   if (config.cursorApiKey) {
-    return { apiKey: config.cursorApiKey, source: CONFIG_PATH };
+    return { apiKey: config.cursorApiKey, source: `${CONFIG_PATH} (legacy)` };
   }
+  const shellProfile = await readShellProfileApiKey();
+  if (shellProfile.apiKey) return shellProfile;
   return { apiKey: "", source: "missing" };
 }
 
@@ -307,24 +439,38 @@ async function writeOutputs({ outputPath, rawText, parsed }) {
 }
 
 async function runConfigure(args) {
-  const existing = await getCursorApiKeyInfo();
+  const scope = String(args.scope || "global");
+  const repoRoot = resolveRepo(args.repo);
+  const profilePath = args.profile ? path.resolve(String(args.profile)) : defaultShellProfile();
+  const envFile = args["env-file"] ? String(args["env-file"]) : ".env.local";
+  let existing;
+  if (scope === "project") existing = await readProjectEnvApiKey(repoRoot, envFile);
+  else if (scope === "global") existing = await readShellProfileApiKey(profilePath);
+  else if (scope === "config") existing = await getCursorApiKeyInfo({ repoRoot });
+  else throw new Error("--scope must be one of: global, project, config.");
+
   let apiKey = "";
 
   if (args["api-key"]) {
     apiKey = String(args["api-key"]).trim();
   } else if (args.stdin) {
     apiKey = await readStdin();
+  } else if (process.env.CURSOR_API_KEY && (args.force || !existing.apiKey)) {
+    apiKey = process.env.CURSOR_API_KEY.trim();
   } else if (existing.apiKey && !args.force) {
     process.stdout.write(`${JSON.stringify({
       ok: true,
-      message: "Cursor API key is already configured. Use --force to replace it.",
+      message: "Cursor API key is already configured for this scope. Use --force to replace it.",
+      scope,
       source: existing.source,
-      config_path: CONFIG_PATH,
     }, null, 2)}\n`);
     return;
   } else {
     process.stdout.write("Configure Cursor Context Scout\n");
-    process.stdout.write("Paste your Cursor API key. Input is hidden and will be stored locally with file mode 0600.\n");
+    process.stdout.write(`Scope: ${scope}\n`);
+    if (scope === "global") process.stdout.write(`Target: ${profilePath}\n`);
+    if (scope === "project") process.stdout.write(`Target: ${path.resolve(repoRoot, envFile)}\n`);
+    process.stdout.write("Paste your Cursor API key. Input is hidden.\n");
     apiKey = await promptHidden("CURSOR_API_KEY: ");
   }
 
@@ -333,30 +479,46 @@ async function runConfigure(args) {
     process.stderr.write("Warning: Cursor API keys usually start with \"crsr_\". Saving the value anyway.\n");
   }
 
-  const config = await readConfig();
-  await writeConfig({
-    ...config,
-    cursorApiKey: apiKey,
-    updatedAt: new Date().toISOString(),
-  });
+  let savedPath;
+  let message;
+  if (scope === "global") {
+    savedPath = await saveGlobalEnv(apiKey, profilePath);
+    message = "Cursor API key saved as a global shell environment variable. Restart your terminal or source the profile file.";
+  } else if (scope === "project") {
+    savedPath = await saveProjectEnv(apiKey, repoRoot, envFile, !args["no-gitignore"]);
+    message = "Cursor API key saved to the project environment file.";
+  } else {
+    const config = await readConfig();
+    await writeConfig({
+      ...config,
+      cursorApiKey: apiKey,
+      updatedAt: new Date().toISOString(),
+    });
+    savedPath = CONFIG_PATH;
+    message = "Cursor API key saved to legacy local config.";
+  }
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
-    message: "Cursor API key saved.",
-    config_path: CONFIG_PATH,
+    scope,
+    message,
+    path: savedPath,
   }, null, 2)}\n`);
 }
 
 async function runDoctor(args) {
   const nodeMajor = Number(process.versions.node.split(".")[0]);
-  const apiKeyInfo = await getCursorApiKeyInfo();
+  const repoRoot = resolveRepo(args.repo);
+  const apiKeyInfo = await getCursorApiKeyInfo({ repoRoot });
   const checks = {
     node: process.version,
     node_ok: nodeMajor >= 22,
     cursor_api_key_set: Boolean(apiKeyInfo.apiKey),
     cursor_api_key_source: apiKeyInfo.source,
     cache_dir: CACHE_DIR,
-    config_path: CONFIG_PATH,
+    project_env_path: path.join(repoRoot, ".env.local"),
+    shell_profile_path: defaultShellProfile(),
+    legacy_config_path: CONFIG_PATH,
     sdk_available: false,
     sdk_bootstrap_checked: Boolean(args["install-sdk"]),
   };
@@ -375,14 +537,14 @@ async function runDoctor(args) {
 
   process.stdout.write(`${JSON.stringify(checks, null, 2)}\n`);
   if (!checks.node_ok) process.stderr.write("Node.js 22+ is recommended for Cursor SDK examples.\n");
-  if (!checks.cursor_api_key_set) process.stderr.write("Cursor API key is not configured; run `cursor-scout.mjs configure` before scout/warmup.\n");
+  if (!checks.cursor_api_key_set) process.stderr.write("Cursor API key is not configured; run `cursor-scout.mjs configure --scope global` or `cursor-scout.mjs configure --scope project --repo .` before scout/warmup.\n");
 }
 
 async function runScout(command, args) {
-  const apiKeyInfo = await getCursorApiKeyInfo();
-  if (!apiKeyInfo.apiKey) throw new Error("Cursor API key is required. Run `cursor-scout.mjs configure` or set CURSOR_API_KEY.");
-
   const repoRoot = resolveRepo(args.repo);
+  const apiKeyInfo = await getCursorApiKeyInfo({ repoRoot });
+  if (!apiKeyInfo.apiKey) throw new Error("Cursor API key is required. Run `cursor-scout.mjs configure --scope global`, `cursor-scout.mjs configure --scope project --repo .`, or set CURSOR_API_KEY.");
+
   const folderScope = relPath(repoRoot, args.folder);
   const task = args.task || args._.join(" ").trim();
   const warmup = command === "warmup";

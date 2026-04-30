@@ -15,11 +15,13 @@ if ! command -v npx >/dev/null 2>&1; then
 fi
 
 echo "Installing ${SKILL} globally from ${REPO}..."
-npx skills add "${REPO}" -g -a claude-code -a codex --skill "${SKILL}" -y --copy
+npx skills add "${REPO}" -g
 
 SCOUT_SCRIPT=""
 for candidate in \
   "${HOME}/.agents/skills/${SKILL}/scripts/cursor-scout.mjs" \
+  "${HOME}/.config/agents/skills/${SKILL}/scripts/cursor-scout.mjs" \
+  "${HOME}/.cursor/skills/${SKILL}/scripts/cursor-scout.mjs" \
   "${HOME}/.codex/skills/${SKILL}/scripts/cursor-scout.mjs" \
   "${HOME}/.claude/skills/${SKILL}/scripts/cursor-scout.mjs"; do
   if [ -f "${candidate}" ]; then
@@ -30,11 +32,11 @@ done
 
 if [ -n "${SCOUT_SCRIPT}" ]; then
   if [ -n "${CURSOR_API_KEY:-}" ]; then
-    echo "Saving CURSOR_API_KEY from the current environment into the local skill config..."
-    printf '%s' "${CURSOR_API_KEY}" | node "${SCOUT_SCRIPT}" configure --stdin || true
+    echo "Saving CURSOR_API_KEY from the current environment into your global shell profile..."
+    printf '%s' "${CURSOR_API_KEY}" | node "${SCOUT_SCRIPT}" configure --scope global --stdin || true
   else
     echo "Cursor API key setup:"
-    node "${SCOUT_SCRIPT}" configure || true
+    node "${SCOUT_SCRIPT}" configure --scope global || true
   fi
 
   echo "Running setup check..."
@@ -47,9 +49,9 @@ cat <<'EOF'
 
 Next steps:
   1. If you skipped API key setup, run:
-       node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
+       node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 
-  2. Run inside any repository:
+  2. Restart your terminal or source your shell profile, then run inside any repository:
        node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo .
 
 EOF

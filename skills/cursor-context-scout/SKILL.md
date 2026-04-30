@@ -17,6 +17,8 @@ Use this skill before making code changes when the task would benefit from Curso
 - `.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs` for Codex or other agents using the shared skills path.
 - `.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs` for Claude Code project installs.
 - `~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Agent Skills installs.
+- `~/.config/agents/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global universal Agent Skills installs.
+- `~/.cursor/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Cursor installs.
 - `~/.codex/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Codex installs.
 - `~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Claude Code installs.
 
@@ -41,13 +43,19 @@ Requirements:
 - Node.js 22+ is recommended by Cursor's SDK examples.
 - Network access is needed the first time `@cursor/sdk` is installed into the cache.
 
-Configure the Cursor API key if `doctor` reports that no key is available:
+Configure the Cursor API key if `doctor` reports that no key is available. Use global setup for all repositories:
 
 ```bash
-node <path-to-cursor-scout.mjs> configure
+node <path-to-cursor-scout.mjs> configure --scope global
 ```
 
-The key is stored locally at `~/.config/cursor-context-scout/config.json` with file mode `0600`. `CURSOR_API_KEY` still works and overrides the saved value.
+Global setup writes an `export CURSOR_API_KEY=...` block to the user's shell profile such as `~/.zshrc`. Use project setup to write `.env.local` in the target repo:
+
+```bash
+node <path-to-cursor-scout.mjs> configure --scope project --repo .
+```
+
+`CURSOR_API_KEY` in the current process has highest priority. Project `.env.local` is read next, then the global shell profile.
 
 Run a setup check:
 

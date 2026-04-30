@@ -2,14 +2,14 @@
 
 `Cursor-Memory-Skills` is an Agent Skills package for Claude Code and Codex. The first bundled skill, `cursor-context-scout`, asks Cursor SDK to inspect a repository before the coding agent edits files, then returns a compact JSON list of files worth reading.
 
-Team-wide user install:
+Global user install:
 
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills -g -a claude-code -a codex --skill cursor-context-scout -y --copy
-node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
+npx skills add nanameru/Cursor-Memory-Skills -g
+node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-Or use the helper script for an install + Cursor API key prompt flow:
+Or use the helper script for an install + global environment variable prompt flow:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skills/main/scripts/install-global.sh)
@@ -18,16 +18,23 @@ bash <(curl -fsSL https://raw.githubusercontent.com/nanameru/Cursor-Memory-Skill
 Install into only the current project:
 
 ```bash
-npx skills add nanameru/Cursor-Memory-Skills -a claude-code -a codex --skill cursor-context-scout -y --copy
+npx skills add nanameru/Cursor-Memory-Skills
+node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
 ```
 
-Set a Cursor API key before first use. The recommended setup stores it locally in `~/.config/cursor-context-scout/config.json` with file mode `0600`:
+Set a Cursor API key before first use. Global setup writes an `export CURSOR_API_KEY=...` block to your shell profile such as `~/.zshrc`:
 
 ```bash
-node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
+node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope global
 ```
 
-You can still use `CURSOR_API_KEY` as an environment variable; it overrides the saved value.
+Project setup writes `CURSOR_API_KEY=...` to `.env.local` and adds `.env.local` to `.gitignore`:
+
+```bash
+node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --scope project --repo .
+```
+
+`CURSOR_API_KEY` in the current process still has highest priority.
 
 The bundled script bootstraps `@cursor/sdk` into a user cache directory on first scout run. Check setup with:
 
