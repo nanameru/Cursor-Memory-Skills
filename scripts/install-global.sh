@@ -36,6 +36,8 @@ if [ -n "${SCOUT_SCRIPT}" ]; then
     printf '%s' "${CURSOR_API_KEY}" | node "${SCOUT_SCRIPT}" configure --scope global --stdin || true
   else
     echo "Cursor API key setup:"
+    echo "Get a Cursor User API Key from https://cursor.com/dashboard > Integrations > User API Keys."
+    echo "Do not use a model-provider key or Cursor Admin API key here."
     node "${SCOUT_SCRIPT}" configure --scope global || true
   fi
 

@@ -36,6 +36,18 @@ node .agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure --sc
 
 `CURSOR_API_KEY` in the current process still has highest priority.
 
+## Get a Cursor API Key
+
+This skill needs a Cursor User API Key for Cursor SDK / Agent authentication. This is different from bringing your own OpenAI, Anthropic, or Gemini provider key in Cursor model settings, and it is not a Cursor Admin API key.
+
+1. Open the Cursor dashboard: <https://cursor.com/dashboard>
+2. Go to `Integrations` > `User API Keys`.
+3. Create or generate a new API key.
+4. Give it a clear name, such as `cursor-context-scout`.
+5. Copy the key immediately and paste it into the `configure` prompt.
+
+Cursor documents this flow in its [CLI authentication docs](https://cursor.com/docs/cli/reference/authentication). If you are looking at team settings, avoid `Cursor Admin API Keys`; those are for the [Cursor Admin API](https://cursor.com/docs/account/teams/admin-api), not this scout skill.
+
 The bundled script bootstraps `@cursor/sdk` into a user cache directory on first scout run. Check setup with:
 
 ```bash

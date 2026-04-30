@@ -470,6 +470,8 @@ async function runConfigure(args) {
     process.stdout.write(`Scope: ${scope}\n`);
     if (scope === "global") process.stdout.write(`Target: ${profilePath}\n`);
     if (scope === "project") process.stdout.write(`Target: ${path.resolve(repoRoot, envFile)}\n`);
+    process.stdout.write("Get a Cursor User API Key from https://cursor.com/dashboard > Integrations > User API Keys.\n");
+    process.stdout.write("Do not use a model-provider key or Cursor Admin API key here.\n");
     process.stdout.write("Paste your Cursor API key. Input is hidden.\n");
     apiKey = await promptHidden("CURSOR_API_KEY: ");
   }

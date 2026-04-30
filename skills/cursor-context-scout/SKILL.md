@@ -39,9 +39,11 @@ The first scout run may be slower because Cursor may need to prepare or warm its
 
 Requirements:
 
-- A Cursor API key must be configured with `configure` or set as `CURSOR_API_KEY`.
+- A Cursor User API Key must be configured with `configure` or set as `CURSOR_API_KEY`.
 - Node.js 22+ is recommended by Cursor's SDK examples.
 - Network access is needed the first time `@cursor/sdk` is installed into the cache.
+
+To get a Cursor User API Key, open <https://cursor.com/dashboard>, then go to `Integrations` > `User API Keys` and create a key. Do not use a model-provider key from Cursor model settings, and do not use a Cursor Admin API key.
 
 Configure the Cursor API key if `doctor` reports that no key is available. Use global setup for all repositories:
 
