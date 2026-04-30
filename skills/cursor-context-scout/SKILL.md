@@ -16,6 +16,7 @@ Use this skill before making code changes when the task would benefit from Curso
 - `${CLAUDE_SKILL_DIR}/scripts/cursor-scout.mjs` when `CLAUDE_SKILL_DIR` is available.
 - `.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs` for Codex or other agents using the shared skills path.
 - `.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs` for Claude Code project installs.
+- `~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Agent Skills installs.
 - `~/.codex/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Codex installs.
 - `~/.claude/skills/cursor-context-scout/scripts/cursor-scout.mjs` for global Claude Code installs.
 
