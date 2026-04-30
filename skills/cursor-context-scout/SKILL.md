@@ -37,9 +37,17 @@ The first scout run may be slower because Cursor may need to prepare or warm its
 
 Requirements:
 
-- `CURSOR_API_KEY` must be set.
+- A Cursor API key must be configured with `configure` or set as `CURSOR_API_KEY`.
 - Node.js 22+ is recommended by Cursor's SDK examples.
 - Network access is needed the first time `@cursor/sdk` is installed into the cache.
+
+Configure the Cursor API key if `doctor` reports that no key is available:
+
+```bash
+node <path-to-cursor-scout.mjs> configure
+```
+
+The key is stored locally at `~/.config/cursor-context-scout/config.json` with file mode `0600`. `CURSOR_API_KEY` still works and overrides the saved value.
 
 Run a setup check:
 

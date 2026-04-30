@@ -29,6 +29,14 @@ for candidate in \
 done
 
 if [ -n "${SCOUT_SCRIPT}" ]; then
+  if [ -n "${CURSOR_API_KEY:-}" ]; then
+    echo "Saving CURSOR_API_KEY from the current environment into the local skill config..."
+    printf '%s' "${CURSOR_API_KEY}" | node "${SCOUT_SCRIPT}" configure --stdin || true
+  else
+    echo "Cursor API key setup:"
+    node "${SCOUT_SCRIPT}" configure || true
+  fi
+
   echo "Running setup check..."
   node "${SCOUT_SCRIPT}" doctor --install-sdk || true
 else
@@ -38,10 +46,10 @@ fi
 cat <<'EOF'
 
 Next steps:
-  1. Set CURSOR_API_KEY in your shell profile:
-       export CURSOR_API_KEY="crsr_..."
+  1. If you skipped API key setup, run:
+       node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs configure
 
-  2. Restart your terminal, then run inside any repository:
+  2. Run inside any repository:
        node ~/.agents/skills/cursor-context-scout/scripts/cursor-scout.mjs warmup --repo .
 
 EOF

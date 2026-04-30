@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -11,21 +11,27 @@ const DEFAULT_MODEL = process.env.CURSOR_SCOUT_MODEL || "composer-2";
 const DEFAULT_MAX_FILES = 12;
 const CACHE_DIR = process.env.CURSOR_SCOUT_CACHE_DIR
   || path.join(process.env.XDG_CACHE_HOME || path.join(homedir(), ".cache"), "cursor-context-scout");
+const CONFIG_DIR = process.env.CURSOR_SCOUT_CONFIG_DIR
+  || path.join(process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config"), "cursor-context-scout");
+const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
 function usage() {
   return `Cursor Context Scout
 
 Usage:
+  cursor-scout.mjs configure [--force] [--stdin] [--api-key <key>]
   cursor-scout.mjs doctor [--install-sdk]
   cursor-scout.mjs warmup [--repo <path>] [--model <id>]
   cursor-scout.mjs scout --task <text> [--repo <path>] [--folder <path>] [--output <file>] [--model <id>] [--max-files <n>] [--timeout-ms <n>]
 
 Environment:
-  CURSOR_API_KEY          Required for warmup/scout.
+  CURSOR_API_KEY          Optional. Overrides the saved API key.
   CURSOR_SCOUT_MODEL     Defaults to ${DEFAULT_MODEL}.
   CURSOR_SCOUT_CACHE_DIR Defaults to ${CACHE_DIR}.
+  CURSOR_SCOUT_CONFIG_DIR Defaults to ${CONFIG_DIR}.
 
 Examples:
+  node scripts/cursor-scout.mjs configure
   node scripts/cursor-scout.mjs doctor
   node scripts/cursor-scout.mjs warmup --repo .
   node scripts/cursor-scout.mjs scout --repo . --task "Fix the Figma comment about the button hover state"
@@ -64,6 +70,84 @@ function relPath(repoRoot, target) {
   if (!target) return undefined;
   const absolute = path.resolve(repoRoot, target);
   return path.relative(repoRoot, absolute) || ".";
+}
+
+async function readConfig() {
+  try {
+    return JSON.parse(await readFile(CONFIG_PATH, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return {};
+    throw new Error(`Failed to read config at ${CONFIG_PATH}: ${error.message}`);
+  }
+}
+
+async function writeConfig(config) {
+  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  await chmod(CONFIG_DIR, 0o700).catch(() => {});
+  await writeFile(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await chmod(CONFIG_PATH, 0o600).catch(() => {});
+}
+
+async function readStdin() {
+  let value = "";
+  process.stdin.setEncoding("utf8");
+  for await (const chunk of process.stdin) value += chunk;
+  return value.trim();
+}
+
+async function promptHidden(prompt) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY || !process.stdin.setRawMode) {
+    throw new Error("Interactive terminal is required. Set CURSOR_API_KEY, pass --stdin, or run configure in a terminal.");
+  }
+
+  return new Promise((resolve, reject) => {
+    const stdin = process.stdin;
+    const stdout = process.stdout;
+    let value = "";
+
+    const cleanup = () => {
+      stdout.write("\n");
+      stdin.setRawMode(false);
+      stdin.pause();
+      stdin.removeListener("data", onData);
+    };
+
+    const onData = (chunk) => {
+      for (const byte of chunk) {
+        if (byte === 3) {
+          cleanup();
+          reject(new Error("Cancelled."));
+          return;
+        }
+        if (byte === 13 || byte === 10) {
+          cleanup();
+          resolve(value.trim());
+          return;
+        }
+        if (byte === 8 || byte === 127) {
+          value = value.slice(0, -1);
+          continue;
+        }
+        if (byte >= 32) value += String.fromCharCode(byte);
+      }
+    };
+
+    stdout.write(prompt);
+    stdin.resume();
+    stdin.setRawMode(true);
+    stdin.on("data", onData);
+  });
+}
+
+async function getCursorApiKeyInfo() {
+  if (process.env.CURSOR_API_KEY) {
+    return { apiKey: process.env.CURSOR_API_KEY, source: "env:CURSOR_API_KEY" };
+  }
+  const config = await readConfig();
+  if (config.cursorApiKey) {
+    return { apiKey: config.cursorApiKey, source: CONFIG_PATH };
+  }
+  return { apiKey: "", source: "missing" };
 }
 
 async function run(cmd, args, options = {}) {
@@ -222,13 +306,57 @@ async function writeOutputs({ outputPath, rawText, parsed }) {
   return { outputPath, rawPath };
 }
 
+async function runConfigure(args) {
+  const existing = await getCursorApiKeyInfo();
+  let apiKey = "";
+
+  if (args["api-key"]) {
+    apiKey = String(args["api-key"]).trim();
+  } else if (args.stdin) {
+    apiKey = await readStdin();
+  } else if (existing.apiKey && !args.force) {
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      message: "Cursor API key is already configured. Use --force to replace it.",
+      source: existing.source,
+      config_path: CONFIG_PATH,
+    }, null, 2)}\n`);
+    return;
+  } else {
+    process.stdout.write("Configure Cursor Context Scout\n");
+    process.stdout.write("Paste your Cursor API key. Input is hidden and will be stored locally with file mode 0600.\n");
+    apiKey = await promptHidden("CURSOR_API_KEY: ");
+  }
+
+  if (!apiKey) throw new Error("Cursor API key was empty.");
+  if (!apiKey.startsWith("crsr_")) {
+    process.stderr.write("Warning: Cursor API keys usually start with \"crsr_\". Saving the value anyway.\n");
+  }
+
+  const config = await readConfig();
+  await writeConfig({
+    ...config,
+    cursorApiKey: apiKey,
+    updatedAt: new Date().toISOString(),
+  });
+
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    message: "Cursor API key saved.",
+    config_path: CONFIG_PATH,
+  }, null, 2)}\n`);
+}
+
 async function runDoctor(args) {
   const nodeMajor = Number(process.versions.node.split(".")[0]);
+  const apiKeyInfo = await getCursorApiKeyInfo();
   const checks = {
     node: process.version,
     node_ok: nodeMajor >= 22,
-    cursor_api_key_set: Boolean(process.env.CURSOR_API_KEY),
+    cursor_api_key_set: Boolean(apiKeyInfo.apiKey),
+    cursor_api_key_source: apiKeyInfo.source,
     cache_dir: CACHE_DIR,
+    config_path: CONFIG_PATH,
     sdk_available: false,
     sdk_bootstrap_checked: Boolean(args["install-sdk"]),
   };
@@ -247,13 +375,12 @@ async function runDoctor(args) {
 
   process.stdout.write(`${JSON.stringify(checks, null, 2)}\n`);
   if (!checks.node_ok) process.stderr.write("Node.js 22+ is recommended for Cursor SDK examples.\n");
-  if (!checks.cursor_api_key_set) process.stderr.write("CURSOR_API_KEY is not set; scout/warmup will fail until it is set.\n");
+  if (!checks.cursor_api_key_set) process.stderr.write("Cursor API key is not configured; run `cursor-scout.mjs configure` before scout/warmup.\n");
 }
 
 async function runScout(command, args) {
-  if (!process.env.CURSOR_API_KEY) {
-    throw new Error("CURSOR_API_KEY is required for Cursor SDK runs.");
-  }
+  const apiKeyInfo = await getCursorApiKeyInfo();
+  if (!apiKeyInfo.apiKey) throw new Error("Cursor API key is required. Run `cursor-scout.mjs configure` or set CURSOR_API_KEY.");
 
   const repoRoot = resolveRepo(args.repo);
   const folderScope = relPath(repoRoot, args.folder);
@@ -274,7 +401,7 @@ async function runScout(command, args) {
   const prompt = buildScoutPrompt({ repoRoot, folderScope, task, maxFiles, warmup });
 
   const agent = await Agent.create({
-    apiKey: process.env.CURSOR_API_KEY,
+    apiKey: apiKeyInfo.apiKey,
     model: { id: model },
     local: {
       cwd: repoRoot,
@@ -330,6 +457,10 @@ async function main() {
   const command = argv[0];
   const args = parseArgs(argv.slice(1));
 
+  if (command === "configure") {
+    await runConfigure(args);
+    return;
+  }
   if (command === "doctor") {
     await runDoctor(args);
     return;
